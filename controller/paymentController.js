@@ -97,8 +97,6 @@ exports.createPaymentOrder = async (req, res) => {
     }
 };
 
-const crypto = require("crypto");
-const paymentModel = require("../model/paymentModel");
 
 exports.cashfreeWebhook = async (req, res) => {
     try {
