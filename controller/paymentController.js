@@ -102,28 +102,28 @@ exports.cashfreeWebhook = async (req, res) => {
 
     try {
 
-        /* ---------- VERIFY SIGNATURE ---------- */
-
         const signature = req.headers["x-webhook-signature"];
-        console.log(signature)
+
+        // Cashfree test webhook
         if (!signature) {
             console.log("Test webhook received");
             return res.status(200).send("OK");
         }
 
+        const rawBody = req.body.toString();
+
         const expectedSignature = crypto
             .createHmac("sha256", process.env.CASHFREE_SECRET_KEY)
-            .update(JSON.stringify(req.body))
+            .update(rawBody)
             .digest("base64");
 
         if (signature !== expectedSignature) {
-            return res.status(401).send("Invalid webhook signature");
+            console.log("Invalid signature");
+            return res.status(401).send("Invalid signature");
         }
 
-        /* ---------- EXTRACT DATA ---------- */
+        const payload = JSON.parse(rawBody);
 
-        const payload = req.body;
-        console.log(payload)
         const orderId = payload?.data?.order?.order_id;
         const paymentStatus = payload?.data?.payment?.payment_status;
         const cfPaymentId = payload?.data?.payment?.cf_payment_id;
@@ -131,8 +131,6 @@ exports.cashfreeWebhook = async (req, res) => {
         if (!orderId) {
             return res.status(400).send("Invalid payload");
         }
-
-        /* ---------- FIND PAYMENT ---------- */
 
         const payment = await paymentModel.findOne({
             providerPaymentId: orderId
@@ -142,13 +140,9 @@ exports.cashfreeWebhook = async (req, res) => {
             return res.status(404).send("Payment not found");
         }
 
-        /* ---------- IDEMPOTENCY CHECK ---------- */
-
         if (payment.status === "success") {
             return res.status(200).send("Already processed");
         }
-
-        /* ---------- HANDLE PAYMENT STATUS ---------- */
 
         if (paymentStatus === "SUCCESS") {
 
@@ -160,26 +154,17 @@ exports.cashfreeWebhook = async (req, res) => {
 
             await payment.save();
 
-            await activateSubscription(payment);
-
-        }
-        else if (paymentStatus === "FAILED") {
+        } else if (paymentStatus === "FAILED") {
             payment.status = "failed";
             await payment.save();
         }
-        else if (paymentStatus === "PENDING") {
-            payment.status = "pending";
-            await payment.save();
-        }
 
-        /* ---------- SUCCESS RESPONSE ---------- */
-
-        res.status(200).send("Webhook processed");
+        return res.status(200).send("Webhook processed");
 
     } catch (error) {
 
-        console.error("Cashfree webhook error:", error);
+        console.error("Webhook error:", error);
+        return res.status(500).send("Webhook failed");
 
-        res.status(500).send("Webhook processing failed");
     }
 };
