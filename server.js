@@ -21,6 +21,16 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use(
+    express.json({
+        verify: (req, res, buf) => {
+            if (req.originalUrl === "/api/webhook/cashfree") {
+                req.rawBody = buf;
+            }
+        },
+    })
+);
+
 app.use('/api', paymentRouter)
 
 app.listen(port, () => {
