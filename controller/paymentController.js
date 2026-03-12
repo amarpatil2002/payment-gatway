@@ -74,8 +74,8 @@ exports.createPaymentOrder = async (req, res) => {
             },
 
             order_meta: {
-                return_url: `${process.env.FRONTEND_URL}/payment-status?order_id={order_id}`,
-                notify_url: `https://payment-gatway-oz0a.onrender.com/api/webhook/cashfree`,
+                return_url: `${process.env.FRONTEND_URL}/payment-status?order_id={order_id}`
+                // notify_url: `https://payment-gatway-oz0a.onrender.com/api/webhook/cashfree`,
             }
         };
 
@@ -105,7 +105,7 @@ exports.cashfreeWebhook = async (req, res) => {
         /* ---------- VERIFY SIGNATURE ---------- */
 
         const signature = req.headers["x-webhook-signature"];
-
+        console.log(signature)
         if (!signature) {
             console.log("Test webhook received");
             return res.status(200).send("OK");
