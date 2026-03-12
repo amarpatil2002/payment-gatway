@@ -75,7 +75,7 @@ exports.createPaymentOrder = async (req, res) => {
 
             order_meta: {
                 return_url: `${process.env.FRONTEND_URL}/payment-status?order_id={order_id}`,
-                notify_url: `${process.env.FRONTEND_URL}/api/payment/webhook/cashfree`,
+                notify_url: `https://payment-gatway-oz0a.onrender.com/api/webhook/cashfree`,
             }
         };
 
