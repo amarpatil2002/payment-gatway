@@ -100,32 +100,32 @@ exports.createPaymentOrder = async (req, res) => {
 exports.cashfreeWebhook = async (req, res) => {
     try {
 
-        const signature = req.headers["x-webhook-signature"];
+        const signature = req.headers["x-webhook-signature"]
+        const timestamp = req.headers["x-webhook-timestamp"]
 
-        if (!signature) {
-            return res.status(400).send("Missing signature header");
+        if (!signature || !timestamp) {
+            return res.status(400).send("Missing signature headers")
         }
-        console.log(signature)
-        /* raw body buffer */
-        const rawBody = req.body;
-        console.log(rawBody)
 
-        /* generate expected signature */
+        const rawBody = req.body
+
+        /* combine timestamp + body */
+        const signedPayload = timestamp + rawBody.toString()
+
         const expectedSignature = crypto
             .createHmac("sha256", process.env.CASHFREE_SECRET_KEY)
-            .update(rawBody)
-            .digest("base64");
+            .update(signedPayload)
+            .digest("base64")
 
-        console.log("Signature:", signature);
-        console.log("Expected :", expectedSignature);
+        console.log("Signature:", signature)
+        console.log("Expected :", expectedSignature)
 
         if (signature !== expectedSignature) {
-            console.log("Invalid signature");
-            return res.status(401).send("Invalid signature");
+            console.log("Invalid signature")
+            return res.status(401).send("Invalid signature")
         }
 
-        /* parse webhook payload */
-        const payload = JSON.parse(rawBody.toString());
+        const payload = JSON.parse(rawBody.toString())
 
         const orderId = payload?.data?.order?.order_id;
         const paymentStatus = payload?.data?.payment?.payment_status;
