@@ -97,34 +97,38 @@ exports.createPaymentOrder = async (req, res) => {
     }
 };
 
+const crypto = require("crypto");
+const paymentModel = require("../model/paymentModel");
+
 exports.cashfreeWebhook = async (req, res) => {
     try {
 
         const signature = req.headers["x-webhook-signature"];
-        const timestamp = req.headers["x-webhook-timestamp"];
-        console.log(signature);
-        if (!signature || !timestamp) {
-            return res.status(400).send("Missing signature headers");
+
+        if (!signature) {
+            return res.status(400).send("Missing signature header");
         }
+        console.log(signature)
+        /* raw body buffer */
+        const rawBody = req.body;
+        console.log(rawBody)
 
-        const rawBody = req.body.toString();
-        console.log(rawBody);
-        /* correct signature payload */
-        const signedPayload = timestamp + rawBody;
-
+        /* generate expected signature */
         const expectedSignature = crypto
             .createHmac("sha256", process.env.CASHFREE_SECRET_KEY)
-            .update(signedPayload)
+            .update(rawBody)
             .digest("base64");
 
-        console.log(signature, expectedSignature)
+        console.log("Signature:", signature);
+        console.log("Expected :", expectedSignature);
 
         if (signature !== expectedSignature) {
             console.log("Invalid signature");
             return res.status(401).send("Invalid signature");
         }
 
-        const payload = JSON.parse(rawBody);
+        /* parse webhook payload */
+        const payload = JSON.parse(rawBody.toString());
 
         const orderId = payload?.data?.order?.order_id;
         const paymentStatus = payload?.data?.payment?.payment_status;
@@ -142,7 +146,7 @@ exports.cashfreeWebhook = async (req, res) => {
             return res.status(404).send("Payment not found");
         }
 
-        /* idempotency check */
+        /* idempotency protection */
         if (payment.status === "success") {
             return res.status(200).send("Already processed");
         }
