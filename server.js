@@ -18,6 +18,14 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 }))
 
+/* ---------- CASHFREE WEBHOOK (RAW BODY) ---------- */
+app.post(
+    "/api/webhook/cashfree",
+    express.raw({ type: "application/json" }),
+    require("./controller/paymentController").cashfreeWebhook
+);
+
+/* ---------- NORMAL BODY PARSERS ---------- */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

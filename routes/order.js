@@ -10,6 +10,5 @@ router.get('/all-plans', getAllPlans)
 router.get('/plan/:planId', getPlan)
 
 router.post("/create-order", createPaymentOrder);
-router.post("/webhook/cashfree", express.raw({ type: "application/json" }), cashfreeWebhook);
 
 module.exports = router
