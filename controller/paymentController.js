@@ -97,25 +97,27 @@ exports.createPaymentOrder = async (req, res) => {
     }
 };
 
-
 exports.cashfreeWebhook = async (req, res) => {
-
     try {
 
         const signature = req.headers["x-webhook-signature"];
-
-        // Cashfree test webhook
-        if (!signature) {
-            console.log("Test webhook received");
-            return res.status(200).send("OK");
+        const timestamp = req.headers["x-webhook-timestamp"];
+        console.log(signature);
+        if (!signature || !timestamp) {
+            return res.status(400).send("Missing signature headers");
         }
 
         const rawBody = req.body.toString();
+        console.log(rawBody);
+        /* correct signature payload */
+        const signedPayload = timestamp + rawBody;
 
         const expectedSignature = crypto
             .createHmac("sha256", process.env.CASHFREE_SECRET_KEY)
-            .update(rawBody)
+            .update(signedPayload)
             .digest("base64");
+
+        console.log(signature, expectedSignature)
 
         if (signature !== expectedSignature) {
             console.log("Invalid signature");
@@ -140,6 +142,7 @@ exports.cashfreeWebhook = async (req, res) => {
             return res.status(404).send("Payment not found");
         }
 
+        /* idempotency check */
         if (payment.status === "success") {
             return res.status(200).send("Already processed");
         }
@@ -147,14 +150,16 @@ exports.cashfreeWebhook = async (req, res) => {
         if (paymentStatus === "SUCCESS") {
 
             payment.status = "success";
+
             payment.metadata = {
                 ...payment.metadata,
                 cfPaymentId
             };
 
             await payment.save();
+        }
 
-        } else if (paymentStatus === "FAILED") {
+        if (paymentStatus === "FAILED") {
             payment.status = "failed";
             await payment.save();
         }
