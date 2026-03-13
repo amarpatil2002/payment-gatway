@@ -35,8 +35,7 @@ exports.createPaymentOrder = async (req, res) => {
             planId,
             status: "pending",
             createdAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) }
-        }).lean();
-
+        });
 
         if (existingPayment && existingPayment.paymentSessionId) {
             return res.json({
@@ -49,20 +48,20 @@ exports.createPaymentOrder = async (req, res) => {
 
         /* ---------- CREATE IDS ---------- */
 
-        const orderId = `ORD_${uuidv4()}`; // internal order id
-        const providerOrderId = `CF_${uuidv4()}`; // gateway order id
+        const orderId = `ORD_${uuidv4()}`;
+        const providerOrderId = `CF_${uuidv4()}`;
 
         /* ---------- CREATE PAYMENT RECORD ---------- */
 
-        await paymentModel.create({
+        const payment = await paymentModel.create({
             userId,
             planId,
             amount: plan.price,
             currency: "INR",
             status: "pending",
             provider: "cashfree",
-            orderId,              // REQUIRED
-            providerOrderId,      // gateway order
+            orderId,
+            providerOrderId,
             metadata: {
                 planName: plan.name
             }
@@ -84,15 +83,20 @@ exports.createPaymentOrder = async (req, res) => {
                 return_url: `${process.env.FRONTEND_URL}/payment-status?order_id={order_id}`
             }
         };
-        console.log(request)
 
         const response = await Cashfree.PGCreateOrder("2023-08-01", request);
-        console.log(response)
+
+        const sessionId = response.data.payment_session_id;
+
+        /* ---------- SAVE SESSION ID ---------- */
+
+        payment.paymentSessionId = sessionId;
+        await payment.save();
 
         return res.json({
             success: true,
             orderId: providerOrderId,
-            paymentSessionId: response.data.payment_session_id
+            paymentSessionId: sessionId
         });
 
     } catch (error) {
