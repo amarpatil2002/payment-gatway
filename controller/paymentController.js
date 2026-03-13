@@ -10,7 +10,6 @@ const { activateSubscription } = require("../services/subscriptionService");
 
 exports.createPaymentOrder = async (req, res) => {
     try {
-
         const { planId, userId, phone } = req.body;
 
         /* ---------- VALIDATION ---------- */
@@ -41,7 +40,7 @@ exports.createPaymentOrder = async (req, res) => {
             { status: "expired" }
         );
 
-        /* ---------- IDEMPOTENT CHECK ---------- */
+        /* ---------- CHECK EXISTING PAYMENT ---------- */
 
         const existingPayment = await paymentModel
             .findOne({
@@ -51,24 +50,20 @@ exports.createPaymentOrder = async (req, res) => {
             })
             .sort({ createdAt: -1 });
 
-        if (existingPayment) {
+        if (existingPayment && existingPayment.paymentSessionId) {
+            return res.json({
+                success: true,
+                message: "Existing payment session",
+                orderId: existingPayment.providerOrderId,
+                paymentSessionId: existingPayment.paymentSessionId
+            });
+        }
 
-            /* ---------- REUSE EXISTING SESSION ---------- */
-
-            if (existingPayment.paymentSessionId) {
-                return res.json({
-                    success: true,
-                    message: "Existing payment session",
-                    orderId: existingPayment.providerOrderId,
-                    paymentSessionId: existingPayment.paymentSessionId
-                });
-            }
-
-            /* ---------- SESSION MISSING → EXPIRE OLD PAYMENT ---------- */
-
-            existingPayment.status = "expired";
-            await existingPayment.save();
-
+        if (existingPayment && !existingPayment.paymentSessionId) {
+            await paymentModel.updateOne(
+                { _id: existingPayment._id },
+                { status: "expired" }
+            );
         }
 
         /* ---------- CREATE NEW ORDER ---------- */
@@ -91,8 +86,6 @@ exports.createPaymentOrder = async (req, res) => {
             }
         });
 
-        /* ---------- CREATE CASHFREE ORDER ---------- */
-
         const request = {
             order_id: providerOrderId,
             order_amount: plan.price,
@@ -109,14 +102,32 @@ exports.createPaymentOrder = async (req, res) => {
             }
         };
 
-        const response = await Cashfree.PGCreateOrder("2023-08-01", request);
+        let response;
+
+        try {
+            response = await Cashfree.PGCreateOrder("2023-08-01", request);
+        } catch (err) {
+
+            console.error("Cashfree create order error:", err?.response?.data || err);
+
+            if (err?.response?.status === 409) {
+
+                return res.status(409).json({
+                    success: false,
+                    message: "Payment order already exists"
+                });
+
+            }
+
+            throw err;
+        }
 
         const sessionId = response.data.payment_session_id;
 
-        /* ---------- SAVE SESSION ID ---------- */
-
-        payment.paymentSessionId = sessionId;
-        await payment.save();
+        await paymentModel.updateOne(
+            { _id: payment._id },
+            { paymentSessionId: sessionId }
+        );
 
         return res.json({
             success: true,
@@ -126,16 +137,7 @@ exports.createPaymentOrder = async (req, res) => {
 
     } catch (error) {
 
-        console.error("createPaymentOrder error:", error);
-
-        /* ---------- HANDLE CASHFREE ORDER CONFLICT ---------- */
-
-        if (error.response?.status === 409) {
-            return res.status(409).json({
-                success: false,
-                message: "Payment order already exists"
-            });
-        }
+        console.error("createPaymentOrder error:", error?.response?.data || error);
 
         return res.status(500).json({
             success: false,
