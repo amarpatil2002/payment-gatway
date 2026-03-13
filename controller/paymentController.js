@@ -4,10 +4,12 @@ const planModel = require("../model/subscriptionPlanModel");
 const { v4: uuidv4 } = require("uuid");
 const mongoose = require("mongoose");
 const crypto = require("crypto");
-
+const logger = require("../config/logger");
+const { activateSubscription } = require("../services/subscriptionService");
 
 exports.createPaymentOrder = async (req, res) => {
     try {
+
         const { planId, userId, phone } = req.body;
 
         if (!mongoose.Types.ObjectId.isValid(planId)) {
@@ -39,13 +41,14 @@ exports.createPaymentOrder = async (req, res) => {
             return res.json({
                 success: true,
                 message: "Existing payment session",
-                orderId: existingPayment.providerPaymentId
+                orderId: existingPayment.providerOrderId
             });
         }
 
-        /* ---------- CREATE ORDER ID ---------- */
+        /* ---------- CREATE IDS ---------- */
 
-        const orderId = `order_${uuidv4()}`;
+        const orderId = `ORD_${uuidv4()}`; // internal order id
+        const providerOrderId = `CF_${uuidv4()}`; // gateway order id
 
         /* ---------- CREATE PAYMENT RECORD ---------- */
 
@@ -56,7 +59,10 @@ exports.createPaymentOrder = async (req, res) => {
             currency: "INR",
             status: "pending",
             provider: "cashfree",
-            providerPaymentId: orderId,
+
+            orderId,              // REQUIRED
+            providerOrderId,      // gateway order
+
             metadata: {
                 planName: plan.name
             }
@@ -65,13 +71,13 @@ exports.createPaymentOrder = async (req, res) => {
         /* ---------- CREATE CASHFREE ORDER ---------- */
 
         const request = {
-            order_id: orderId,
+            order_id: providerOrderId,
             order_amount: plan.price,
             order_currency: "INR",
 
             customer_details: {
                 customer_id: userId,
-                customer_phone: phone,
+                customer_phone: phone
             },
 
             order_meta: {
@@ -80,9 +86,10 @@ exports.createPaymentOrder = async (req, res) => {
         };
 
         const response = await Cashfree.PGCreateOrder("2023-08-01", request);
+
         return res.json({
             success: true,
-            orderId,
+            orderId: providerOrderId,
             paymentSessionId: response.data.payment_session_id
         });
 
@@ -94,97 +101,140 @@ exports.createPaymentOrder = async (req, res) => {
             success: false,
             message: "Payment initialization failed"
         });
+
     }
 };
+
 
 exports.cashfreeWebhook = async (req, res) => {
     try {
 
-        const signature = req.headers["x-webhook-signature"]
-        const timestamp = req.headers["x-webhook-timestamp"]
+        const signature = req.headers["x-webhook-signature"];
+        const timestamp = req.headers["x-webhook-timestamp"];
 
         if (!signature || !timestamp) {
-            return res.status(400).send("Missing signature headers")
+            logger.warn("Webhook missing signature headers");
+            return res.status(400).send("Missing signature headers");
         }
 
-        const rawBody = req.body
+        const rawBody = req.body;
 
-        /* combine timestamp + body */
-        const signedPayload = timestamp + rawBody.toString()
+        /* ---------- SIGNATURE VERIFICATION ---------- */
+
+        const signedPayload = timestamp + rawBody.toString();
 
         const expectedSignature = crypto
             .createHmac("sha256", process.env.CASHFREE_SECRET_KEY)
             .update(signedPayload)
-            .digest("base64")
+            .digest("base64");
 
-        console.log("Signature:", signature)
-        console.log("Expected :", expectedSignature)
+        const isValid = crypto.timingSafeEqual(
+            Buffer.from(signature),
+            Buffer.from(expectedSignature)
+        );
 
-        if (signature !== expectedSignature) {
-            console.log("Invalid signature")
-            return res.status(401).send("Invalid signature")
+        if (!isValid) {
+            logger.warn("Invalid Cashfree webhook signature");
+            return res.status(401).send("Invalid signature");
         }
 
-        const payload = JSON.parse(req.body.toString());
-        const eventType = payload?.type;                               // e.g. "PAYMENT_SUCCESS_WEBHOOK"
+        /* ---------- PARSE PAYLOAD ---------- */
+
+        const payload = JSON.parse(rawBody.toString());
+
+        const eventType = payload?.type;
         const orderId = payload?.data?.order?.order_id;
-        const paymentStatus = payload?.data?.payment?.payment_status;     // "SUCCESS" | "FAILED" | "PENDING"
+        const paymentStatus = payload?.data?.payment?.payment_status;
         const cfPaymentId = payload?.data?.payment?.cf_payment_id;
         const paymentAmount = payload?.data?.payment?.payment_amount;
 
         if (!orderId) {
+            logger.warn("Webhook missing orderId");
             return res.status(400).send("Invalid payload");
         }
 
+        /* ---------- FIND PAYMENT ---------- */
+
         const payment = await paymentModel.findOne({
-            providerPaymentId: orderId
+            providerOrderId: orderId
         });
 
         if (!payment) {
+            logger.error(`Payment not found for order ${orderId}`);
             return res.status(404).send("Payment not found");
         }
 
-        /* idempotency protection */
-        if (payment.status === "success") {
+        /* ---------- IDEMPOTENCY PROTECTION ---------- */
+
+        if (payment.webhookProcessed) {
+            logger.info(`Webhook already processed ${orderId}`);
             return res.status(200).send("Already processed");
         }
 
-        // ── Handle SUCCESS ────────────────────────────────────────
+        /* ---------- HANDLE SUCCESS ---------- */
+
         if (paymentStatus === "SUCCESS") {
+
             payment.status = "success";
-            payment.metadata = { ...payment.metadata, cfPaymentId, paymentAmount, processedAt: new Date() };
+            payment.providerPaymentId = cfPaymentId;
+            payment.webhookProcessed = true;
+
+            payment.metadata = {
+                ...payment.metadata,
+                paymentAmount,
+                processedAt: new Date()
+            };
+
             await payment.save();
 
-            // ── Activate subscription (credits, expiry, etc.) ─────
             try {
+
                 await activateSubscription(payment);
-                logger.info(`Subscription activated for user ${payment.userId} | Order ${orderId}`);
+
+                logger.info(
+                    `Subscription activated | user=${payment.userId} | order=${orderId}`
+                );
+
             } catch (activationErr) {
-                logger.error(`Subscription activation failed for ${orderId}: ${activationErr.message}`);
-                // Don't return 500 — payment was already marked success; retry logic via webhook retries
+
+                logger.error(
+                    `Subscription activation failed ${orderId} : ${activationErr.message}`
+                );
+
             }
 
             return res.status(200).send("Webhook processed");
         }
 
+        /* ---------- HANDLE FAILURE ---------- */
+
         if (paymentStatus === "FAILED") {
+
             payment.status = "failed";
-            payment.metadata = {
-                ...payment.metadata,
-                failureReason: payload?.data?.error_details?.error_description || "Payment failed",
-                cfPaymentId
-            };
+            payment.providerPaymentId = cfPaymentId;
+            payment.webhookProcessed = true;
+
+            payment.failureReason =
+                payload?.data?.error_details?.error_description || "Payment failed";
+
             await payment.save();
+
+            logger.info(`Payment failed order=${orderId}`);
+
             return res.status(200).send("Webhook processed");
         }
+
+        /* ---------- OTHER EVENTS ---------- */
+
+        logger.info(`Unhandled webhook event ${eventType}`);
 
         return res.status(200).send("Webhook processed");
 
     } catch (error) {
 
-        console.error("Webhook error:", error);
-        return res.status(500).send("Webhook failed");
+        logger.error(`Webhook error: ${error.message}`);
 
+        return res.status(500).send("Webhook failed");
     }
 };
 
