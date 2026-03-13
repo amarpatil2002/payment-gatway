@@ -1,7 +1,7 @@
-const purchasedSubscriptionModel = require("../models/purchasedSubscriptionPlanModel");
-const creditAccountModel = require("../models/creditAccountModel");
-const planModel = require("../models/subscriptionPlanModel");
-const creditLedgerModel = require("../models/creditLedgerModel");
+const purchasedSubscriptionModel = require("../model/purchasedSubscriptionPlanModel");
+const creditAccountModel = require("../model/creditAccountModel");
+const planModel = require("../model/subscriptionPlanModel");
+const creditLedgerModel = require("../model/creditLedgerModel");
 const logger = require("../config/logger");
 
 
