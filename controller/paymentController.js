@@ -37,11 +37,13 @@ exports.createPaymentOrder = async (req, res) => {
             createdAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) }
         }).lean();
 
-        if (existingPayment) {
+
+        if (existingPayment && existingPayment.paymentSessionId) {
             return res.json({
                 success: true,
                 message: "Existing payment session",
-                orderId: existingPayment.providerOrderId
+                orderId: existingPayment.providerOrderId,
+                paymentSessionId: existingPayment.paymentSessionId
             });
         }
 
@@ -82,8 +84,10 @@ exports.createPaymentOrder = async (req, res) => {
                 return_url: `${process.env.FRONTEND_URL}/payment-status?order_id={order_id}`
             }
         };
+        console.log(request)
 
         const response = await Cashfree.PGCreateOrder("2023-08-01", request);
+        console.log(response)
 
         return res.json({
             success: true,
