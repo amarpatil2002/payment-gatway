@@ -15,7 +15,7 @@ const app = express();
 )()
 
 app.use(cors({
-    origin: ["http://localhost:5173", "https://payment-frontend-102.vercel.app", "https://payment-frontend-101.vercel.app", "https://payment-frontend-o16m.onrender.coms"],
+    origin: ["http://localhost:5173", "https://payment-frontend-105.vercel.app", "https://payment-frontend-101.vercel.app", "https://payment-frontend-o16m.onrender.coms"],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 }))
 
