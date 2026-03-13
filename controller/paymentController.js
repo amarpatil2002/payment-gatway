@@ -59,10 +59,8 @@ exports.createPaymentOrder = async (req, res) => {
             currency: "INR",
             status: "pending",
             provider: "cashfree",
-
             orderId,              // REQUIRED
             providerOrderId,      // gateway order
-
             metadata: {
                 planName: plan.name
             }
@@ -239,46 +237,100 @@ exports.cashfreeWebhook = async (req, res) => {
 };
 
 exports.getOrderStatus = async (req, res) => {
+
     try {
+
         const { orderId } = req.params;
+
+        if (!orderId) {
+            return res.status(400).json({
+                success: false,
+                message: "orderId is required"
+            });
+        }
+
         const payment = await paymentModel
-            .findOne({ providerPaymentId: orderId })
+            .findOne({ providerOrderId: orderId })
             .populate("planId", "name price validityDays credits")
+            .select("status amount currency createdAt planId")
             .lean();
 
-        if (!payment) return res.status(404).json({ success: false, message: "Order not found" });
+        if (!payment) {
+            return res.status(404).json({
+                success: false,
+                message: "Order not found"
+            });
+        }
 
-        return res.json({ success: true, data: payment });
+        return res.json({
+            success: true,
+            data: payment
+        });
+
     } catch (error) {
-        logger.error(`getOrderStatus error: ${error.message}`);
-        return res.status(500).json({ success: false, message: "Failed to fetch order status" });
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch order status"
+        });
+
     }
+
 };
 
 exports.getPaymentHistory = async (req, res) => {
+
     try {
+
         const { userId } = req.params;
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: "userId is required"
+            });
+        }
+
+        let page = parseInt(req.query.page) || 1;
+        let limit = parseInt(req.query.limit) || 10;
+
+        if (limit > 50) limit = 50;
+
+        const skip = (page - 1) * limit;
 
         const [payments, total] = await Promise.all([
+
             paymentModel
                 .find({ userId })
                 .populate("planId", "name price")
+                .select("status amount currency createdAt planId")
                 .sort({ createdAt: -1 })
-                .skip((page - 1) * limit)
+                .skip(skip)
                 .limit(limit)
                 .lean(),
+
             paymentModel.countDocuments({ userId })
+
         ]);
 
         return res.json({
             success: true,
             data: payments,
-            pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+            pagination: {
+                page,
+                limit,
+                total,
+                pages: Math.ceil(total / limit)
+            }
         });
+
     } catch (error) {
-        logger.error(`getPaymentHistory error: ${error.message}`);
-        return res.status(500).json({ success: false, message: "Failed to fetch payment history" });
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch payment history"
+        });
+
     }
+
 };
