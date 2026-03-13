@@ -7,6 +7,7 @@ const crypto = require("crypto");
 const logger = require("../config/logger");
 const { activateSubscription } = require("../services/subscriptionService");
 
+
 exports.createPaymentOrder = async (req, res) => {
     try {
 
@@ -52,48 +53,22 @@ exports.createPaymentOrder = async (req, res) => {
 
         if (existingPayment) {
 
-            // if session already exists reuse it
-            if (existingPayment.paymentSessionId) {
+            /* ---------- REUSE EXISTING SESSION ---------- */
 
+            if (existingPayment.paymentSessionId) {
                 return res.json({
                     success: true,
                     message: "Existing payment session",
                     orderId: existingPayment.providerOrderId,
                     paymentSessionId: existingPayment.paymentSessionId
                 });
-
             }
 
-            // regenerate session if missing
-            const request = {
-                order_id: existingPayment.providerOrderId,
-                order_amount: existingPayment.amount,
-                order_currency: "INR",
+            /* ---------- SESSION MISSING → EXPIRE OLD PAYMENT ---------- */
 
-                customer_details: {
-                    customer_id: userId,
-                    customer_phone: phone,
-                    customer_email: "test@example.com"
-                },
-
-                order_meta: {
-                    return_url: `${process.env.FRONTEND_URL}/payment-status?order_id={order_id}`
-                }
-            };
-
-            const response = await Cashfree.PGCreateOrder("2023-08-01", request);
-
-            const sessionId = response.data.payment_session_id;
-
-            existingPayment.paymentSessionId = sessionId;
+            existingPayment.status = "expired";
             await existingPayment.save();
 
-            return res.json({
-                success: true,
-                message: "Session regenerated",
-                orderId: existingPayment.providerOrderId,
-                paymentSessionId: sessionId
-            });
         }
 
         /* ---------- CREATE NEW ORDER ---------- */
@@ -153,6 +128,15 @@ exports.createPaymentOrder = async (req, res) => {
 
         console.error("createPaymentOrder error:", error);
 
+        /* ---------- HANDLE CASHFREE ORDER CONFLICT ---------- */
+
+        if (error.response?.status === 409) {
+            return res.status(409).json({
+                success: false,
+                message: "Payment order already exists"
+            });
+        }
+
         return res.status(500).json({
             success: false,
             message: "Payment initialization failed"
@@ -160,7 +144,6 @@ exports.createPaymentOrder = async (req, res) => {
 
     }
 };
-
 
 exports.cashfreeWebhook = async (req, res) => {
     try {
