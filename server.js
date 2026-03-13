@@ -32,6 +32,6 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/api', paymentRouter)
 
-app.listen(port, () => {
-    console.log(`server listening at ${port}`);
-})
+app.listen(port, "0.0.0.0", () => {
+    console.log(`Server running on port ${port}`);
+});
