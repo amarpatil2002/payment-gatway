@@ -98,7 +98,7 @@ exports.createPaymentOrder = async (req, res) => {
             },
 
             order_meta: {
-                return_url: `${process.env.FRONTEND_URL}/payment-status?order_id={order_id}`
+                return_url: `${process.env.FRONTEND_URL}`
             }
         };
 
