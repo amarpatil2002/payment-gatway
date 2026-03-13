@@ -5,7 +5,7 @@ const creditAccountSchema = new mongoose.Schema({
 
     userId: {
         type: ObjectId,
-        ref: 'User',
+        ref: "User",
         required: true,
         unique: true,
         index: true
@@ -14,7 +14,8 @@ const creditAccountSchema = new mongoose.Schema({
     balance: {
         type: Number,
         required: true,
-        min: 0
+        min: 0,
+        default: 0
     },
 
     used: {
@@ -22,7 +23,18 @@ const creditAccountSchema = new mongoose.Schema({
         required: true,
         min: 0,
         default: 0
+    },
+
+    totalCredited: {
+        type: Number,
+        default: 0
+    },
+
+    totalDebited: {
+        type: Number,
+        default: 0
     }
+
 
 }, { timestamps: true });
 

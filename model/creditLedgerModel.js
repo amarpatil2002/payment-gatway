@@ -26,9 +26,25 @@ const creditLedgerSchema = new mongoose.Schema({
         required: true
     },
 
-    referenceId: mongoose.Schema.Types.ObjectId,
+    referenceId: {
+        type: mongoose.Schema.Types.ObjectId,
+        unique: true,
+        index: true
+    },
 
-    balanceAfter: Number
+    balanceAfter: {
+        type: Number,
+        required: true
+    },
+
+    description: {
+        type: String
+    },
+
+    metadata: {
+        type: Object,
+        default: {}
+    }
 
 }, { timestamps: true });
 
