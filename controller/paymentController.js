@@ -150,7 +150,7 @@ const { activateSubscription } = require("../services/subscriptionService");
 exports.createPaymentOrder = async (req, res) => {
     try {
 
-        const { planId, userId, phone } = req.body;
+        const { planId, userId, phone, email } = req.body;
 
         /* ---------- VALIDATION ---------- */
 

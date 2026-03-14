@@ -5,27 +5,22 @@ const subscriptionSchema = new mongoose.Schema({
 
     userId: {
         type: ObjectId,
-        ref: 'User',
+        ref: "User",
         required: true,
         index: true
     },
 
     planId: {
         type: ObjectId,
-        ref: 'Plan',
+        ref: "Plan",
         required: true,
         index: true
     },
-    paymentId: {
-        type: mongoose.Schema.Types.ObjectId,
-        unique: true,
-        index: true
-    }
-    ,
+
     status: {
         type: String,
-        enum: ['active', 'expired', 'cancelled'],
-        default: 'active',
+        enum: ["active", "expired", "cancelled", "revoked"],
+        default: "active",
         index: true
     },
 
@@ -35,18 +30,50 @@ const subscriptionSchema = new mongoose.Schema({
         required: true
     },
 
-    // Optional for unlimited plans
     expiresAt: {
         type: Date,
         default: null,
         index: true
+    },
+
+    paymentId: {
+        type: String,
+        default: null
+    },
+
+    cancelledAt: {
+        type: Date,
+        default: null
+    },
+
+    revokedAt: {
+        type: Date,
+        default: null
+    },
+
+    revokedBy: {
+        type: ObjectId,
+        ref: "User",
+        default: null
+    },
+
+    revokeReason: {
+        type: String,
+        trim: true
     }
 
 }, {
-    timestamps: true,
+    timestamps: true
 });
 
-subscriptionSchema.index({ userId: 1, status: 1 });
+
+subscriptionSchema.index(
+    { paymentId: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { paymentId: { $exists: true, $ne: null } }
+    }
+);
 
 const purchasedSubscriptionModel = mongoose.model('Subscription', subscriptionSchema);
 
