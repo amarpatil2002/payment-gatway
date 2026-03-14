@@ -243,6 +243,7 @@ exports.createPaymentOrder = async (req, res) => {
             },
 
             order_meta: {
+                notify_url: `https://payment-gatway-1.onrender.com/api/webhook/cashfree`,
                 return_url: `${process.env.FRONTEND_URL}`
             }
 
