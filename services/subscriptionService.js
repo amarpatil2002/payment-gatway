@@ -7,7 +7,7 @@ const logger = require("../config/logger");
 exports.activateSubscription = async (payment) => {
 
     try {
-
+        console.log("activate subscription................");
         if (!payment || !payment._id || !payment.userId || !payment.planId) {
             throw new Error("Invalid payment payload");
         }
@@ -76,7 +76,7 @@ exports.activateSubscription = async (payment) => {
         );
 
         /* ---------- CREDIT TOP-UP ---------- */
-
+        console.log("subscription.............", subscription);
         if (plan.credits > 0) {
 
             const ledgerExists = await creditLedgerModel

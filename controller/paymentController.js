@@ -150,8 +150,8 @@ const { activateSubscription } = require("../services/subscriptionService");
 exports.createPaymentOrder = async (req, res) => {
     try {
 
-        const { planId, userId, phone, email } = req.body;
-
+        const { planId, phone, email } = req.body;
+        const userId = "69a1838e87ca015417a08a54"
         /* ---------- VALIDATION ---------- */
 
         if (!mongoose.Types.ObjectId.isValid(planId)) {
@@ -243,7 +243,7 @@ exports.createPaymentOrder = async (req, res) => {
             },
 
             order_meta: {
-                return_url: `${process.env.FRONTEND_URL}/payment-status?order_id={order_id}`
+                return_url: `${process.env.FRONTEND_URL}`
             }
 
         };
